@@ -1,3 +1,6 @@
 from django.contrib import admin
+from .models import UploadRecord
 
-# Register your models here.
+admin.site.register(UploadRecord)
+
+#This lets you see data visually later.

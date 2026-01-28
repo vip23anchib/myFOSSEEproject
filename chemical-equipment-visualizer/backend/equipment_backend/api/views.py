@@ -2,6 +2,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 import pandas as pd
 
+from .models import UploadRecord
+
 
 @api_view(['GET'])
 def health_check(request):
@@ -29,20 +31,58 @@ def upload_csv(request):
             status=400
         )
 
-    required_columns = {'Equipment Name', 'Type', 'Flowrate', 'Pressure', 'Temperature'}
+    required_columns = {
+        'Equipment Name',
+        'Type',
+        'Flowrate',
+        'Pressure',
+        'Temperature'
+    }
+
     if not required_columns.issubset(df.columns):
         return Response(
             {"error": "CSV missing required columns"},
             status=400
         )
 
-  summary = {
-    "total_equipment": int(len(df)),
-    "average_flowrate": round(df['Flowrate'].mean(), 2),
-    "average_pressure": round(df['Pressure'].mean(), 2),
-    "average_temperature": round(df['Temperature'].mean(), 2),
-    "equipment_type_distribution": df['Type'].value_counts().to_dict()
-}
+    summary = {
+        "total_equipment": int(len(df)),
+        "average_flowrate": round(df['Flowrate'].mean(), 2),
+        "average_pressure": round(df['Pressure'].mean(), 2),
+        "average_temperature": round(df['Temperature'].mean(), 2),
+        "equipment_type_distribution": df['Type'].value_counts().to_dict()
+    }
 
+    # Save to database
+    UploadRecord.objects.create(
+        total_equipment=summary["total_equipment"],
+        average_flowrate=summary["average_flowrate"],
+        average_pressure=summary["average_pressure"],
+        average_temperature=summary["average_temperature"],
+        equipment_type_distribution=summary["equipment_type_distribution"]
+    )
+
+    # Keep only last 5 uploads
+    if UploadRecord.objects.count() > 5:
+        oldest = UploadRecord.objects.order_by('uploaded_at').first()
+        oldest.delete()
 
     return Response(summary)
+
+
+@api_view(['GET'])
+def upload_history(request):
+    records = UploadRecord.objects.order_by('-uploaded_at')[:5]
+
+    data = []
+    for record in records:
+        data.append({
+            "uploaded_at": record.uploaded_at,
+            "total_equipment": record.total_equipment,
+            "average_flowrate": record.average_flowrate,
+            "average_pressure": record.average_pressure,
+            "average_temperature": record.average_temperature,
+            "equipment_type_distribution": record.equipment_type_distribution
+        })
+
+    return Response(data)
